@@ -492,3 +492,9 @@ TSWLatexianTemp*
 
 # Support for Project snippet scope
 !.vscode/*.code-snippets
+
+# Misc
+.DS_Store
+.neptune/
+data/*.zip
+data/*.txt

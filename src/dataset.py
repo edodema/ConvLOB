@@ -115,13 +115,26 @@ class LOBDataModule(pl.LightningDataModule):
         self,
         data_dir: Path,
         batch_size: int,
+        num_workers: int,
         input_idx: int = 40,
         label_idx: int = -5,
         window: int = 100,
         pred_horizon_idx: int = -1,
     ):
+        """FI-2010 data module.
+
+        Args:
+            data_dir (Path): Data directory.
+            batch_size (int): Batch size.
+            num_workers (int): Number of workers.
+            input_idx (int, optional): Last column for input data. Defaults to 40.
+            label_idx (int, optional): First column for labels. Defaults to -5.
+            window (int, optional): Window size. Defaults to 100.
+            pred_horizon_idx (int, optional): Prediction horizon index. Defaults to -1.
+        """
         self.data_dir = data_dir
         self.batch_size = batch_size
+        self.num_workers = num_workers
 
         self.input_idx = input_idx
         self.label_idx = label_idx
@@ -246,7 +259,7 @@ class LOBDataModule(pl.LightningDataModule):
             self.train,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=12,
+            num_workers=self.num_workers,
             pin_memory=True,
         )
 
@@ -260,7 +273,7 @@ class LOBDataModule(pl.LightningDataModule):
             self.val,
             batch_size=self.batch_size,
             shuffle=False,
-            num_workers=12,
+            num_workers=self.num_workers,
             pin_memory=True,
         )
 
@@ -274,6 +287,6 @@ class LOBDataModule(pl.LightningDataModule):
             self.test,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=12,
+            num_workers=self.num_workers,
             pin_memory=True,
         )

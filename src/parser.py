@@ -1,5 +1,6 @@
 import argparse
 import torch
+from pathlib import Path
 
 parser = argparse.ArgumentParser(
     prog="Add name",  # TODO
@@ -10,14 +11,14 @@ parser = argparse.ArgumentParser(
 # * Directories.
 parser.add_argument(
     "--data_dir",
-    type=str,
+    type=Path,
     default="./data",
     help="Directory in which data are stored.",
 )
 
 parser.add_argument(
     "--checkpoint_dir",
-    type=str,
+    type=Path,
     default="./checkpoints",
     help="Directory in which checkpoints are stored.",
 )

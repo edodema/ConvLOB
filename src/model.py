@@ -23,6 +23,29 @@ class Flatten(nn.Module):
         return x.view(batch_size, -1)
 
 
+class Unflatten(nn.Module):
+    def __init__(self, channels: int = 4):
+        """Unflatten module.
+
+        Args:
+            channels (int, optional): Number of channels we want. Defaults to 4.
+        """
+        super(Unflatten, self).__init__()
+        self.channels = channels
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
+        b, h, w = x.shape
+        return x.view(b, self.channels, h, w // self.channels)
+
+
 class Squeeze(nn.Module):
     def __init__(self, dim: int = -1):
         """Squeeze module.
@@ -67,6 +90,93 @@ class Unsqueeze(nn.Module):
         return x.unsqueeze(dim=self.dim)
 
 
+class Conv2D(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 4,
+        out_channels: int = 4,
+        kernel: int = 3,
+        stride: int = 1,
+    ):
+        super(Conv2D, self).__init__()
+
+        self.block = nn.Sequential(
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel,
+                stride=stride,
+                padding=0,
+            ),
+            nn.BatchNorm2d(num_features=out_channels),
+            nn.LeakyReLU(negative_slope=0.2),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.block(x)
+
+
+class Conv1D(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 4,
+        out_channels: int = 4,
+        kernel: int = 3,
+        stride: int = 1,
+    ):
+        super(Conv1D, self).__init__()
+
+        self.block = nn.Sequential(
+            nn.Conv1d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel,
+                stride=stride,
+                padding=0,
+            ),
+            nn.BatchNorm1d(num_features=out_channels),
+            nn.LeakyReLU(negative_slope=0.2),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.block(x)
+
+
+class Attention(nn.Module):
+    def __init__(
+        self, in_channels: int, out_channels: int, embed_dim: int, num_heads: int
+    ):
+        super(Attention, self).__init__()
+
+        self.q = Conv1D(
+            in_channels=in_channels, out_channels=embed_dim, kernel=3, stride=1
+        )
+        self.k = Conv1D(
+            in_channels=in_channels, out_channels=embed_dim, kernel=3, stride=1
+        )
+        self.v = Conv1D(
+            in_channels=in_channels, out_channels=embed_dim, kernel=3, stride=1
+        )
+
+        self.att = nn.MultiheadAttention(
+            embed_dim=embed_dim, num_heads=num_heads, dropout=0
+        )
+
+        self.conv = Conv1D(
+            in_channels=embed_dim, out_channels=out_channels, kernel=1, stride=2
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        q = self.q(x).permute(2, 0, 1)
+        k = self.k(x).permute(2, 0, 1)
+        v = self.v(x).permute(2, 0, 1)
+
+        out = self.att(query=q, key=k, value=v, need_weights=False)[0].permute(1, 2, 0)
+        out = self.conv(out)
+
+        return out
+
+
 class Model(nn.Module):
     def __init__(self, num_classes: int = 3):
         """Neural network.
@@ -77,26 +187,18 @@ class Model(nn.Module):
         super(Model, self).__init__()
 
         self.net = nn.Sequential(
-            Unsqueeze(dim=1),
-            #
-            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=4),
-            nn.LeakyReLU(negative_slope=0.2),
-            #
-            nn.Conv2d(in_channels=16, out_channels=16, kernel_size=4),
-            nn.MaxPool2d(kernel_size=2),
-            nn.LeakyReLU(negative_slope=0.2),
-            #
-            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3),
-            nn.LeakyReLU(negative_slope=0.2),
-            #
-            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3),
-            nn.MaxPool2d(kernel_size=2),
-            nn.LeakyReLU(negative_slope=0.2),
-            #
-            nn.Flatten(),
-            #
-            nn.Linear(in_features=4032, out_features=32),
-            nn.Linear(in_features=32, out_features=num_classes),
+            # Get (pb,vb,pa,ba) as channels.
+            Unflatten(channels=4),
+            # Feature extraction.
+            Conv2D(in_channels=4, out_channels=16, kernel=3, stride=2),
+            Conv2D(in_channels=16, out_channels=8, kernel=3, stride=1),
+            Conv2D(in_channels=8, out_channels=64, kernel=1, stride=2),
+            # We now work on three dimensional data.
+            Squeeze(dim=-1),
+            Attention(in_channels=64, out_channels=16, embed_dim=32, num_heads=8),
+            # We flatten everything.
+            Flatten(),
+            nn.Linear(in_features=176, out_features=num_classes),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -281,3 +383,12 @@ class LitModel(pl.LightningModule):
         else:
             scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt)
             return [opt, scheduler]
+
+
+if __name__ == "__main__":
+    t = torch.randn(16, 100, 40)
+
+    model = Model()
+
+    out = model(t)
+    print(out.shape)

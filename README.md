@@ -3,6 +3,12 @@ Simple Limit Order Book trending classification, both with a convolutional and a
 
 # Project tree
 ```
+.
+├── data
+├── docs
+│   └── imgs
+├── notebooks
+└── src
 ```
 # Environment
 Install the environment in your preferred way, remember to place yourself in the root directory.

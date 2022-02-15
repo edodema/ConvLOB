@@ -1,5 +1,3 @@
-from pathlib import Path
-import torch
 from src.parser import args
 from src.dataset import LOBDataModule
 from src.model import LitModel
@@ -7,13 +5,16 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import NeptuneLogger
 
 if __name__ == "__main__":
+    # Fix seed.
     pl.seed_everything(42)
 
+    # * Setup.
     datamodule = LOBDataModule(
         data_dir=args.data_dir, batch_size=args.batch_size, num_workers=args.num_workers
     )
     model = LitModel(lr=args.lr, decay=args.decay)
 
+    # Logging.
     if args.logger:
         logger = NeptuneLogger(
             project="edodema/LimitOrderBook",
@@ -23,8 +24,6 @@ if __name__ == "__main__":
     else:
         logger = None
 
-    # ! Need to choose for which metrics we want to monitor.
-
     trainer = pl.Trainer(
         gpus=-1 if args.device == "cuda" else 0,
         max_epochs=args.epochs,
@@ -33,8 +32,12 @@ if __name__ == "__main__":
         num_sanity_val_steps=1,
     )
 
-    # * Train and val.
-    trainer.fit(
-        model=model,
-        datamodule=datamodule,
-    )
+    if args.train:
+        # * Train and val.
+        trainer.fit(
+            model=model,
+            datamodule=datamodule,
+        )
+    else:
+        # * Test.
+        trainer.test(model=model, datamodule=datamodule)

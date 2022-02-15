@@ -3,6 +3,7 @@ import torch
 from torch import nn
 import pytorch_lightning as pl
 import torchmetrics
+from src.parser import args
 
 
 class Flatten(nn.Module):
@@ -98,6 +99,14 @@ class Conv2D(nn.Module):
         kernel: int = 3,
         stride: int = 1,
     ):
+        """Basic 2D convolutional block.
+
+        Args:
+            in_channels (int, optional): Input channels. Defaults to 4.
+            out_channels (int, optional): Output channels. Defaults to 4.
+            kernel (int, optional): Kernel size. Defaults to 3.
+            stride (int, optional): Stride dimension. Defaults to 1.
+        """
         super(Conv2D, self).__init__()
 
         self.block = nn.Sequential(
@@ -113,6 +122,14 @@ class Conv2D(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
         return self.block(x)
 
 
@@ -124,6 +141,14 @@ class Conv1D(nn.Module):
         kernel: int = 3,
         stride: int = 1,
     ):
+        """Basic 1D convolutional block.
+
+        Args:
+            in_channels (int, optional): Input channels. Defaults to 4.
+            out_channels (int, optional): Output channels. Defaults to 4.
+            kernel (int, optional): Kernel size. Defaults to 3.
+            stride (int, optional): Stride dimension. Defaults to 1.
+        """
         super(Conv1D, self).__init__()
 
         self.block = nn.Sequential(
@@ -139,6 +164,14 @@ class Conv1D(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
         return self.block(x)
 
 
@@ -146,8 +179,17 @@ class Attention(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, embed_dim: int, num_heads: int
     ):
+        """Basic attention module.
+
+        Args:
+            in_channels (int): Input channels.
+            out_channels (int): Output channels.
+            embed_dim (int): Embedding dimension.
+            num_heads (int): Number of attention heads.
+        """
         super(Attention, self).__init__()
 
+        # Convolutions for query, key and value.
         self.q = Conv1D(
             in_channels=in_channels, out_channels=embed_dim, kernel=3, stride=1
         )
@@ -158,6 +200,7 @@ class Attention(nn.Module):
             in_channels=in_channels, out_channels=embed_dim, kernel=3, stride=1
         )
 
+        # Multihead attention.
         self.att = nn.MultiheadAttention(
             embed_dim=embed_dim, num_heads=num_heads, dropout=0
         )
@@ -167,6 +210,14 @@ class Attention(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
         q = self.q(x).permute(2, 0, 1)
         k = self.k(x).permute(2, 0, 1)
         v = self.v(x).permute(2, 0, 1)
@@ -177,17 +228,52 @@ class Attention(nn.Module):
         return out
 
 
-class Model(nn.Module):
+class ModelConv(nn.Module):
     def __init__(self, num_classes: int = 3):
-        """Neural network.
+        """Neural network based on convolutions.
+        Args:
+            num_classes (int, optional): Number of classes. Defaults to 3.
+        """
+        super(ModelConv, self).__init__()
+
+        self.net = nn.Sequential(
+            Unsqueeze(dim=1),
+            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=4),
+            nn.LeakyReLU(negative_slope=0.2),
+            nn.Conv2d(in_channels=16, out_channels=16, kernel_size=4),
+            nn.MaxPool2d(kernel_size=2),
+            nn.LeakyReLU(negative_slope=0.2),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3),
+            nn.LeakyReLU(negative_slope=0.2),
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3),
+            nn.MaxPool2d(kernel_size=2),
+            nn.LeakyReLU(negative_slope=0.2),
+            nn.Flatten(),
+            nn.Linear(in_features=4032, out_features=32),
+            nn.Linear(in_features=32, out_features=num_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass.
+        Args:
+            x (torch.Tensor): Input tensor.
+        Returns:
+            torch.Tensor: Output logits.
+        """
+        return self.net(x)
+
+
+class ModelAtt(nn.Module):
+    def __init__(self, num_classes: int = 3):
+        """Neural network based on attention.
 
         Args:
             num_classes (int, optional): Number of classes. Defaults to 3.
         """
-        super(Model, self).__init__()
+        super(ModelAtt, self).__init__()
 
         self.net = nn.Sequential(
-            # Get (pb,vb,pa,ba) as channels.
+            # Get (pb, vb, pa, ba) as channels.
             Unflatten(channels=4),
             # Feature extraction.
             Conv2D(in_channels=4, out_channels=16, kernel=3, stride=2),
@@ -228,7 +314,13 @@ class LitModel(pl.LightningModule):
         super(LitModel, self).__init__()
         self.save_hyperparameters()
 
-        self.model = Model()
+        if args.model == "conv":
+            self.model = ModelConv()
+        elif args.model == "att":
+            self.model = ModelAtt()
+        else:
+            raise Exception("Model not valid.")
+
         self.criterion = nn.CrossEntropyLoss()
 
         # * Metrics.
@@ -388,7 +480,7 @@ class LitModel(pl.LightningModule):
 if __name__ == "__main__":
     t = torch.randn(16, 100, 40)
 
-    model = Model()
+    model = ModelAtt()
 
     out = model(t)
     print(out.shape)

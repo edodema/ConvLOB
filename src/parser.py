@@ -23,6 +23,14 @@ parser.add_argument(
     help="Directory in which checkpoints are stored.",
 )
 
+# * Model.
+parser.add_argument(
+    "--model",
+    choices=["conv", "att"],
+    type=str,
+    default="conv",
+    help="Neural network model.",
+)
 parser.add_argument("--num_classes", type=int, default=3, help="Number of classes.")
 
 # * Training.
